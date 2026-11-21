@@ -1,64 +1,53 @@
-from fastapi import FastAPI
 
-api = FastAPI()
-all_todos = [{'todo_id': 1, 'todo_name': 'sports', 'todo_description': 'palying cricket'},
-             {'todo_id': 2, 'todo_name': 'read',
-              'todo_description': 'read five pages'},
-             {'todo_id': 3, 'todo_name': 'shop',
-              'todo_description': 'shop formal clothing'},
-             {'todo_id': 4, 'todo_name': 'study',
-              'todo_description': 'read one hour'},
-             {'todo_id': 5, 'todo_name': 'meditate', 'todo_description': 'meditate for five minutes'}]
+from lms_agent import chat, driver
+from contextlib import asynccontextmanager
+from typing import Any
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
 
-@api.get('/toddos')
-def getTodos():
-    return {'result': all_todos}
-
-# searching by parameters...
-
-
-@api.get('/toddosbyid/{todo_id}')
-def getToddosById(todo_id: int):
-    for todo in all_todos:
-        if todo['todo_id'] == todo_id:
-            return {'result': todo}
-        else:
-            return {'result': 'no matching record'}
-# get item by query string
+# Ensure the Neo4j driver closes cleanly when Uvicorn shuts down
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    driver.close()
 
 
-@api.get('/getTodoByQueryString')
-def getTodoByQueryString(first_n: int = None):
-    for todo in all_todos:
-        if first_n:
-            return {'result': all_todos[:first_n]}
-        else:
-            return {'result': all_todos}
+app = FastAPI(title="Adaptive Learning Tutor API", lifespan=lifespan)
 
 
-@api.put('/putdataTodo')
-def updateTodo(todo: dict):
-    last_todo = all_todos.pop()  # get last item in index-
-    todo_id = last_todo['todo_id']+1
-    print(todo_id)
-    all_todos.append(
-        {'todo_id': todo_id, 'todo_name': todo['todo_name'], 'todo_description': todo['todo_description']})
-    print(all_todos)
-    return {'result': todo}
+# ---------- Request & Response Schemas ----------
+class ChatRequest(BaseModel):
+    id: str = Field(..., examples=["s1"])
+    message: str = Field(..., examples=[
+                         "I don't understand graphing lines. Help!"])
+    history: list[dict[str, Any]] = Field(default_factory=list, examples=[[]])
 
 
-@api.get('/')
-def index():
-    return {"message", "Hello World from Fast API Server !"}
+class ChatResponse(BaseModel):
+    reply: str
+    history: list[dict[str, Any]]
 
 
-@api.get('/calculation')
-def calculation():
-    pass
-    return ""
+# ---------- Endpoints ----------
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 
-@api.get('/database-operation')
-def dbcall():
-    return {"message", "dbcall"}
+@app.post("/chat", response_model=ChatResponse)
+def tutor_chat(req: ChatRequest):
+    try:
+        reply, updated_messages = chat(
+            student_id=req.id,
+            user_message=req.message,
+            history=req.history,
+        )
+        # Convert LangChain BaseMessage objects to serializable dicts for JSON response
+        serialized_history = [
+            m.model_dump() if hasattr(m, "model_dump") else m
+            for m in updated_messages
+        ]
+        return ChatResponse(reply=reply, history=serialized_history)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

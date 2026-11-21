@@ -7,15 +7,18 @@ from langchain_core.tools import tool
 from langchain.agents import create_agent
 import json
 
+
 script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 
 load_dotenv(dotenv_path=project_root / ".env")
 load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+NEO4J_USER = os.getenv("NEO4J_USER")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 
 driver = GraphDatabase.driver(
-    "neo4j://localhost:7687", auth=("neo4j", "passw0rd")
+    "neo4j://localhost:7687", auth=(NEO4J_USER, NEO4J_PASSWORD)
 )
 
 # Note: Verify the exact Groq model ID in your Groq console (e.g., "qwen/qwen3-32b" or "llama-3.3-70b-versatile")
@@ -23,7 +26,7 @@ llm = ChatGroq(
     groq_api_key=GROQ_API_KEY,
     model_name="openai/gpt-oss-120b",
     temperature=0,
-    max_tokens=800,
+    max_tokens=4096,
 )
 
 
@@ -94,6 +97,7 @@ agent = create_agent(
 
 
 # ---------- Simplified Agent Invocation ----------
+
 def chat(student_id: str, user_message: str, history=None):
     messages = list(history or []) + [
         {"role": "user",
@@ -103,10 +107,47 @@ def chat(student_id: str, user_message: str, history=None):
     # create_agent runs the tool loop automatically and returns the full message history
     result = agent.invoke({"messages": messages})
     updated_messages = result["messages"]
-    final_reply = updated_messages[-1].content
+    last_msg = updated_messages[-1]
+    if isinstance(last_msg.content, str):
+        final_reply = last_msg.content
+    elif isinstance(last_msg.content, list):
+        final_reply = "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in last_msg.content
+        )
+    else:
+        final_reply = ""
     return final_reply, updated_messages
 
 
 if __name__ == "__main__":
-    reply, _ = chat("S001", "I don't understand graphing lines. Help!")
-    print(reply)
+
+    if __name__ == "__main__":
+        student_id = input("Enter student ID (default: s1): ").strip() or "s1"
+    history = []
+    print("Adaptive Lerning Demo ::: Enter your questions Tutor ready! Type 'exit' or 'quit' to stop.\n")
+
+    try:
+        while True:
+            user_message = input("Question: ").strip()
+
+            if not user_message:
+                continue
+
+            if user_message.lower() in {"exit", "quit"}:
+                print("Ending Interative Learning  session. Goodbye!")
+                break
+
+            reply, history = chat(
+                student_id=student_id,
+                user_message=user_message,
+                history=history,
+            )
+            print(f"\nTutor: {reply}\n")
+    except KeyboardInterrupt:
+        print("\nSession interrupted. Goodbye!")
+    finally:
+        driver.close()
+
+    # reply, _ = chat("s1", "I don't understand graphing lines. Help!")
+    # print(reply)
