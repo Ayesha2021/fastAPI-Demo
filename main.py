@@ -20,7 +20,7 @@ app = FastAPI(title="Adaptive Learning Tutor API", lifespan=lifespan)
 class ChatRequest(BaseModel):
     id: str = Field(..., examples=["s1"])
     message: str = Field(..., examples=[
-                         "I don't understand graphing lines. Help!"])
+                         "I have difficulty learning Grade 8th Map. Help!"])
     history: list[dict[str, Any]] = Field(default_factory=list, examples=[[]])
 
 
@@ -44,10 +44,11 @@ def tutor_chat(req: ChatRequest):
             history=req.history,
         )
         # Convert LangChain BaseMessage objects to serializable dicts for JSON response
-        serialized_history = [
+        # pickling history by serializing
+        pickling_history = [
             m.model_dump() if hasattr(m, "model_dump") else m
             for m in updated_messages
         ]
-        return ChatResponse(reply=reply, history=serialized_history)
+        return ChatResponse(reply=reply, history=pickling_history)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
