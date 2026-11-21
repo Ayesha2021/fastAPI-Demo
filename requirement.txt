@@ -1,0 +1,15 @@
+#nv main.py
+#python -m venv fastapiVenv
+#pip install -r requirement.txt
+#uvicorn main:api --port 9999
+#fastapi dev main.py
+fastapi
+uvicorn
+fastapi-cli
+pydantic
+httpx
+neo4j
+anthropic
+langchain-groq
+langchain
+langchain-community
